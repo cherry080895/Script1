@@ -1,0 +1,557 @@
+-- V24 Fly GUI (Studio-safe) - LocalScript
+-- Place this LocalScript in StarterPlayerScripts (or StarterGui)
+-- Features: Fly, CFrameFly (CFly), NoClip on Normal Fly, Speed slider, Transparency textbox,
+-- Anti-multi-GUI, Close, Minimize, simple Linux-like UI
+
+-- ======= CONFIG =======
+local GUI_NAME = "V24FlyGUI"
+local DEFAULT_TRANSPARENCY = 0.75 -- 0..1 (0 = normal, 1 = fully transparent)
+local SPEED_MIN = 10
+local SPEED_MAX = 250
+local DEFAULT_SPEED = 100
+
+-- ======= SERVICES =======
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Anti multi GUI: remove existing GUI with same name
+local old = playerGui:FindFirstChild(GUI_NAME)
+if old then
+	old:Destroy()
+end
+
+-- ======= UI BUILD =======
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = GUI_NAME
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+-- Main window
+local main = Instance.new("Frame")
+main.Name = "Window"
+main.Size = UDim2.new(0, 360, 0, 220)
+main.Position = UDim2.new(0.02, 0, 0.1, 0)
+main.AnchorPoint = Vector2.new(0, 0)
+main.BackgroundColor3 = Color3.fromRGB(30, 30, 30) -- dark linux-ish
+main.BorderSizePixel = 0
+main.Parent = screenGui
+main.Active = true
+main.Draggable = true
+
+-- Title bar
+local titleBar = Instance.new("Frame")
+titleBar.Name = "TitleBar"
+titleBar.Size = UDim2.new(1, 0, 0, 28)
+titleBar.Position = UDim2.new(0, 0, 0, 0)
+titleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = main
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -70, 1, 0)
+titleLabel.Position = UDim2.new(0, 8, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "V24 Fly GUI"
+titleLabel.Font = Enum.Font.SourceSansBold
+titleLabel.TextSize = 16
+titleLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = titleBar
+
+-- Minimize and Close buttons
+local btnClose = Instance.new("TextButton")
+btnClose.Name = "Close"
+btnClose.Size = UDim2.new(0, 28, 0, 20)
+btnClose.Position = UDim2.new(1, -36, 0.5, -10)
+btnClose.Parent = titleBar
+btnClose.Text = "✕"
+btnClose.Font = Enum.Font.SourceSansBold
+btnClose.TextSize = 16
+btnClose.BackgroundColor3 = Color3.fromRGB(220, 80, 80)
+btnClose.BorderSizePixel = 0
+btnClose.TextColor3 = Color3.fromRGB(20,20,20)
+
+local btnMin = Instance.new("TextButton")
+btnMin.Name = "Min"
+btnMin.Size = UDim2.new(0, 28, 0, 20)
+btnMin.Position = UDim2.new(1, -70, 0.5, -10)
+btnMin.Parent = titleBar
+btnMin.Text = "—"
+btnMin.Font = Enum.Font.SourceSansBold
+btnMin.TextSize = 18
+btnMin.BackgroundColor3 = Color3.fromRGB(180, 180, 180)
+btnMin.BorderSizePixel = 0
+btnMin.TextColor3 = Color3.fromRGB(20,20,20)
+
+-- Content container
+local content = Instance.new("Frame")
+content.Name = "Content"
+content.Size = UDim2.new(1, -14, 1, -40)
+content.Position = UDim2.new(0, 7, 0, 34)
+content.BackgroundTransparency = 1
+content.Parent = main
+
+local uiPadding = Instance.new("UIPadding", content)
+uiPadding.PaddingTop = UDim.new(0, 4)
+uiPadding.PaddingLeft = UDim.new(0, 6)
+
+-- Row helper function
+local function newRow(y)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 34)
+	row.Position = UDim2.new(0, 0, 0, y)
+	row.BackgroundTransparency = 1
+	row.Parent = content
+	return row
+end
+
+-- Elements
+local y = 0
+
+-- Fly Toggle Row
+local row1 = newRow(y); y = y + 36
+local flyBtn = Instance.new("TextButton")
+flyBtn.Size = UDim2.new(0, 120, 0, 30)
+flyBtn.Position = UDim2.new(0, 0, 0, 2)
+flyBtn.Parent = row1
+flyBtn.Text = "Fly: OFF"
+flyBtn.Font = Enum.Font.SourceSans
+flyBtn.TextSize = 14
+flyBtn.BorderSizePixel = 0
+flyBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+flyBtn.TextColor3 = Color3.fromRGB(20,20,20)
+
+local cfBtn = Instance.new("TextButton")
+cfBtn.Size = UDim2.new(0, 100, 0, 30)
+cfBtn.Position = UDim2.new(0, 130, 0, 2)
+cfBtn.Parent = row1
+cfBtn.Text = "CFly: OFF"
+cfBtn.Font = Enum.Font.SourceSans
+cfBtn.TextSize = 14
+cfBtn.BorderSizePixel = 0
+cfBtn.BackgroundColor3 = Color3.fromRGB(120,120,120)
+cfBtn.TextColor3 = Color3.fromRGB(240,240,240)
+
+-- Speed slider row
+local row2 = newRow(y); y = y + 46
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(0, 110, 0, 22)
+speedLabel.Position = UDim2.new(0, 0, 0, 6)
+speedLabel.Parent = row2
+speedLabel.Text = "Fly Speed: " .. tostring(DEFAULT_SPEED)
+speedLabel.Font = Enum.Font.SourceSans
+speedLabel.TextSize = 14
+speedLabel.BackgroundTransparency = 1
+speedLabel.TextColor3 = Color3.fromRGB(240,240,240)
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- slider background
+local sliderBg = Instance.new("Frame")
+sliderBg.Size = UDim2.new(0, 200, 0, 10)
+sliderBg.Position = UDim2.new(0, 120, 0, 12)
+sliderBg.BackgroundColor3 = Color3.fromRGB(60,60,60)
+sliderBg.BorderSizePixel = 0
+sliderBg.Parent = row2
+
+local sliderFill = Instance.new("Frame")
+sliderFill.Size = UDim2.new(0.5, 0, 1, 0) -- default 50%
+sliderFill.Position = UDim2.new(0, 0, 0, 0)
+sliderFill.BackgroundColor3 = Color3.fromRGB(100,180,255)
+sliderFill.BorderSizePixel = 0
+sliderFill.Parent = sliderBg
+
+local sliderKnob = Instance.new("TextButton")
+sliderKnob.Size = UDim2.new(0, 16, 0, 16)
+sliderKnob.Position = UDim2.new(0.5, -8, 0.5, -8)
+sliderKnob.AnchorPoint = Vector2.new(0, 0)
+sliderKnob.Text = ""
+sliderKnob.BackgroundColor3 = Color3.fromRGB(230,230,230)
+sliderKnob.BorderSizePixel = 0
+sliderKnob.Parent = sliderBg
+
+-- Transparency row
+local row3 = newRow(y); y = y + 40
+local transLabel = Instance.new("TextLabel")
+transLabel.Size = UDim2.new(0, 120, 0, 24)
+transLabel.Position = UDim2.new(0, 0, 0, 6)
+transLabel.Parent = row3
+transLabel.Text = "GUI Transparency:"
+transLabel.Font = Enum.Font.SourceSans
+transLabel.TextSize = 14
+transLabel.BackgroundTransparency = 1
+transLabel.TextColor3 = Color3.fromRGB(240,240,240)
+transLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local transBox = Instance.new("TextBox")
+transBox.Size = UDim2.new(0, 80, 0, 22)
+transBox.Position = UDim2.new(0, 130, 0, 6)
+transBox.Parent = row3
+transBox.Text = tostring(DEFAULT_TRANSPARENCY)
+transBox.Font = Enum.Font.SourceSans
+transBox.TextSize = 14
+transBox.ClearTextOnFocus = false
+transBox.TextColor3 = Color3.fromRGB(240,240,240)
+transBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+transBox.BorderSizePixel = 0
+transBox.TextXAlignment = Enum.TextXAlignment.Center
+
+-- Info label
+local info = Instance.new("TextLabel")
+info.Size = UDim2.new(1, -10, 0, 34)
+info.Position = UDim2.new(0, 0, 1, -38)
+info.Parent = main
+info.BackgroundTransparency = 1
+info.Text = "Normal Fly: Q (up) & E (down). CFly no vertical movement."
+info.Font = Enum.Font.SourceSansItalic
+info.TextSize = 12
+info.TextColor3 = Color3.fromRGB(200,200,200)
+info.TextWrapped = true
+info.TextXAlignment = Enum.TextXAlignment.Left
+info.TextYAlignment = Enum.TextYAlignment.Top
+info.RichText = false
+
+-- ======= STATE VARIABLES =======
+local flyEnabled = false
+local cFlyEnabled = false
+local noClipEnabled = true -- noClip applied when normal fly active
+local flySpeed = DEFAULT_SPEED
+local guiTransparency = DEFAULT_TRANSPARENCY
+
+-- Update UI transparency function
+local function applyGuiTransparency(t)
+	t = math.clamp(tonumber(t) or DEFAULT_TRANSPARENCY, 0, 1)
+	guiTransparency = t
+	-- apply to backgrounds (titleBar and main)
+	main.BackgroundTransparency = t
+	titleBar.BackgroundTransparency = t * 0.5
+	content.BackgroundTransparency = 1 -- content uses transparent backgrounds, keep text visible
+	-- For clarity, change label transparency a bit
+	titleLabel.TextTransparency = math.clamp(t * 0.6, 0, 1)
+	speedLabel.TextTransparency = titleLabel.TextTransparency
+	transLabel.TextTransparency = titleLabel.TextTransparency
+end
+
+applyGuiTransparency(DEFAULT_TRANSPARENCY)
+
+-- ======= FUNCTIONALITY =======
+local char, hrp, humanoid
+local rootChangedConn
+local runConn
+local previousCanCollide = {}
+
+local function updateCharacterRefs()
+	char = player.Character
+	if not char then
+		hrp = nil
+		humanoid = nil
+		return
+	end
+	hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+	humanoid = char:FindFirstChildOfClass("Humanoid")
+end
+
+player.CharacterAdded:Connect(function()
+	wait(0.1)
+	updateCharacterRefs()
+end)
+updateCharacterRefs()
+
+-- NoClip helpers
+local function setNoClip(state)
+	if not char then return end
+	for _, part in pairs(char:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+			if state then
+				-- store previous CanCollide
+				previousCanCollide[part] = part.CanCollide
+				part.CanCollide = false
+			else
+				if previousCanCollide[part] ~= nil then
+					part.CanCollide = previousCanCollide[part]
+					previousCanCollide[part] = nil
+				else
+					part.CanCollide = true
+				end
+			end
+		end
+	end
+end
+
+-- Clean up stored previousCanCollide if parts removed
+char = player.Character
+if char then
+	char.DescendantRemoving:Connect(function(d)
+		previousCanCollide[d] = nil
+	end)
+end
+
+-- Normal Fly impl using BodyVelocity + BodyGyro
+local bv, bg
+local flyUp = false
+local flyDown = false
+
+local function enableNormalFly(enable)
+	if not char or not hrp or not humanoid then return end
+	flyEnabled = enable
+	if enable then
+		-- create BV and BG
+		if not bv or not bv.Parent then
+			bv = Instance.new("BodyVelocity")
+			bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+			bv.Velocity = Vector3.new(0,0,0)
+			bv.P = 1e4
+			bv.Parent = hrp
+		end
+		if not bg or not bg.Parent then
+			bg = Instance.new("BodyGyro")
+			bg.MaxTorque = Vector3.new(4e5, 4e5, 4e5)
+			bg.CFrame = hrp.CFrame
+			bg.Parent = hrp
+		end
+
+		if noClipEnabled then
+			setNoClip(true)
+		end
+
+		flyBtn.Text = "Fly: ON"
+		flyBtn.BackgroundColor3 = Color3.fromRGB(120, 220, 140)
+	else
+		-- disable
+		if bv and bv.Parent then bv:Destroy(); bv = nil end
+		if bg and bg.Parent then bg:Destroy(); bg = nil end
+		setNoClip(false)
+		flyBtn.Text = "Fly: OFF"
+		flyBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+	end
+end
+
+-- CFly impl (CFrame based) - moves by camera lookvector, no vertical control
+local function enableCFly(enable)
+	cFlyEnabled = enable
+	if enable then
+		cfBtn.Text = "CFly: ON"
+		cfBtn.BackgroundColor3 = Color3.fromRGB(120, 220, 140)
+	else
+		cfBtn.Text = "CFly: OFF"
+		cfBtn.BackgroundColor3 = Color3.fromRGB(120,120,120)
+	end
+end
+
+-- Input handling for Q/E (up/down)
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if gpe then return end
+	if input.UserInputType == Enum.UserInputType.Keyboard then
+		if input.KeyCode == Enum.KeyCode.Q then
+			flyUp = true
+		elseif input.KeyCode == Enum.KeyCode.E then
+			flyDown = true
+		end
+	end
+end)
+UserInputService.InputEnded:Connect(function(input, gpe)
+	if gpe then return end
+	if input.UserInputType == Enum.UserInputType.Keyboard then
+		if input.KeyCode == Enum.KeyCode.Q then
+			flyUp = false
+		elseif input.KeyCode == Enum.KeyCode.E then
+			flyDown = false
+		end
+	end
+end)
+
+-- Slider interaction
+local dragging = false
+local function setSliderFromX(x)
+	local absPos = sliderBg.AbsolutePosition
+	local width = sliderBg.AbsoluteSize.X
+	local localX = math.clamp(x - absPos.X, 0, width)
+	local fraction = localX / math.max(1, width)
+	sliderFill.Size = UDim2.new(fraction, 0, 1, 0)
+	sliderKnob.Position = UDim2.new(fraction, -8, 0.5, -8)
+	local speed = math.floor(SPEED_MIN + (SPEED_MAX - SPEED_MIN) * fraction + 0.5)
+	flySpeed = speed
+	speedLabel.Text = "Fly Speed: " .. tostring(speed)
+end
+
+sliderBg.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		setSliderFromX(input.Position.X)
+	end
+end)
+sliderBg.InputChanged:Connect(function(input)
+	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		setSliderFromX(input.Position.X)
+	end
+end)
+sliderBg.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+	end
+end)
+
+sliderKnob.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+	end
+end)
+sliderKnob.InputChanged:Connect(function(input)
+	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		setSliderFromX(input.Position.X)
+	end
+end)
+sliderKnob.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+	end
+end)
+
+-- Apply initial slider to DEFAULT_SPEED
+do
+	local frac = (DEFAULT_SPEED - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)
+	frac = math.clamp(frac, 0, 1)
+	sliderFill.Size = UDim2.new(frac, 0, 1, 0)
+	sliderKnob.Position = UDim2.new(frac, -8, 0.5, -8)
+	flySpeed = DEFAULT_SPEED
+	speedLabel.Text = "Fly Speed: " .. tostring(DEFAULT_SPEED)
+end
+
+-- Trans textbox handling
+transBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed then
+		local val = tonumber(transBox.Text)
+		if val == nil then
+			transBox.Text = tostring(guiTransparency)
+			return
+		end
+		val = math.clamp(val, 0, 1)
+		transBox.Text = tostring(val)
+		applyGuiTransparency(val)
+	end
+end)
+
+-- Buttons
+flyBtn.MouseButton1Click:Connect(function()
+	-- toggle fly - if CFly enabled, both can be used: per HowTo, CFly toggled then press Fly to use CFly. We'll let toggles be independent.
+	if cFlyEnabled then
+		-- If CFly is ON, pressing Fly activates CFly movement (enable both states)
+		enableNormalFly(false)
+		enableCFly(true)
+		-- But to keep the UI consistent, we'll treat pressing Fly as enabling normal fly if CFly off,
+		-- or enabling CFly movement if CFly on. Simpler: toggle normal fly.
+		enableNormalFly(not flyEnabled)
+	else
+		enableNormalFly(not flyEnabled)
+	end
+end)
+
+cfBtn.MouseButton1Click:Connect(function()
+	enableCFly(not cFlyEnabled)
+end)
+
+btnClose.MouseButton1Click:Connect(function()
+	-- cleanup
+	if runConn then runConn:Disconnect(); runConn = nil end
+	setNoClip(false)
+	if bv and bv.Parent then bv:Destroy(); bv = nil end
+	if bg and bg.Parent then bg:Destroy(); bg = nil end
+	screenGui:Destroy()
+end)
+
+local minimized = false
+btnMin.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	if minimized then
+		-- hide content, keep title only
+		content.Visible = false
+		main.Size = UDim2.new(0, 160, 0, 34)
+	else
+		content.Visible = true
+		main.Size = UDim2.new(0, 360, 0, 220)
+	end
+end)
+
+-- Update loop for fly behaviours
+local cam = workspace.CurrentCamera
+
+runConn = RunService.RenderStepped:Connect(function(dt)
+	-- refresh character refs if needed
+	if not char or not char.Parent then
+		updateCharacterRefs()
+	end
+	if not char or not hrp or not humanoid then return end
+
+	-- Normal Fly
+	if flyEnabled and bv and bg then
+		-- Directional movement: use camera lookvector projected to XZ plane
+		local moveDir = Vector3.new(0,0,0)
+		-- WASD / arrow keys support from Humanoid.MoveDirection if wanted:
+		local moveVector = humanoid.MoveDirection -- normalized direction from control input
+		if moveVector.Magnitude > 0.01 then
+			-- Move relative to camera orientation
+			local camLook = cam.CFrame.LookVector
+			local camRight = cam.CFrame.RightVector
+			local forward = Vector3.new(camLook.X, 0, camLook.Z).Unit
+			local right = Vector3.new(camRight.X, 0, camRight.Z).Unit
+			moveDir = (forward * moveVector.Z + right * moveVector.X)
+		end
+
+		local vert = 0
+		if flyUp then vert = 1 elseif flyDown then vert = -1 end
+
+		local targetVel = (moveDir.Unit * flySpeed)
+		if moveDir.Magnitude < 0.01 then targetVel = Vector3.new(0,0,0) end
+		targetVel = Vector3.new(targetVel.X, vert * flySpeed, targetVel.Z)
+		bv.Velocity = targetVel
+		-- Keep orientation stable with camera
+		bg.CFrame = CFrame.new(hrp.Position, hrp.Position + cam.CFrame.LookVector)
+	end
+
+	-- CFly: cframe position changes in RenderStepped
+	if cFlyEnabled and hrp then
+		-- Move by camera direction & input (WASD)
+		local moveVector = humanoid.MoveDirection
+		local camC = cam.CFrame
+		local look = Vector3.new(camC.LookVector.X, 0, camC.LookVector.Z)
+		local right = Vector3.new(camC.RightVector.X, 0, camC.RightVector.Z)
+		local dir = (look.Unit * moveVector.Z + right.Unit * moveVector.X)
+		local pos = hrp.CFrame
+		local speed = flySpeed
+		if dir.Magnitude > 0.01 then
+			local newPos = pos + CFrame.new(dir.Unit * speed * dt)
+			-- keep same Y (no vertical)
+			newPos = CFrame.new(newPos.Position.X, pos.Position.Y, newPos.Position.Z, newPos:ToEulerAnglesXYZ())
+			hrp.CFrame = newPos
+		end
+		-- No vertical movement allowed in CFly by design
+	end
+end)
+
+-- Keep GUI draggable within screen (simple clamp)
+main:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+	local ap = main.AbsolutePosition
+	local asz = main.AbsoluteSize
+	local screenX = screenGui.AbsoluteSize.X
+	local screenY = screenGui.AbsoluteSize.Y
+	if ap.X < 0 then main.Position = UDim2.new(0, 0, main.Position.Y.Scale, main.Position.Y.Offset) end
+	if ap.Y < 0 then main.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset, 0, 0) end
+	if ap.X + asz.X > screenX then main.Position = UDim2.new(0, screenX - asz.X, main.Position.Y.Scale, main.Position.Y.Offset) end
+	if ap.Y + asz.Y > screenY then main.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset, 0, screenY - asz.Y) end
+end)
+
+-- Safety: on character respawn, disable fly and cf
+player.CharacterRemoving:Connect(function()
+	enableNormalFly(false)
+	enableCFly(false)
+end)
+
+-- initial states
+enableNormalFly(false)
+enableCFly(false)
+applyGuiTransparency(guiTransparency)
+
+-- End of script
